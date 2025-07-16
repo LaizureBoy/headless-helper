@@ -150,12 +150,6 @@ switch ($method) {
     }
 }
 
-# At this point $targetIP holds:
-#  - the machine’s local IP if they chose LAN
-#  - their entered VPN IP if they chose VPN
-#  - "0.0.0.0" if they chose Port (to be rewritten later in your patcher)
-
-
 
 # — Ensure scripts.forceIp is set correctly — 
 if ($content -match '"scripts"\s*:\s*{') {
@@ -178,7 +172,6 @@ if ($content -match '"scripts"\s*:\s*{') {
 # Locate the JSONC file (only once, earlier in your script)
 $jsonc = Get-ChildItem -Path $ScriptDir -Recurse -Filter 'fika.jsonc' -ErrorAction SilentlyContinue | Select-Object -First 1
 
-# …do all your $content = $content -replace … adjustments…
 
 # ==== Safe write‑back ====
 if (-not $jsonc -or [string]::IsNullOrWhiteSpace($jsonc.FullName)) {
@@ -201,10 +194,10 @@ else {
 
 # In‑game F12 reminder based on hosting type
 if ($hostMethod -match '^(?i)vpn$') {
-    Write-Host "In‑game: Press F12, select the Fika.Core tab, and set 'Force IP' and 'Force Bind IP' to your VPN IP ($targetIP)." -ForegroundColor Cyan
+    Write-Host "In‑game: Press F12, select the Fika.Core tab, and set 'Force IP' and 'Force Bind IP' to your VPN IP ($targetIP)." -ForegroundColor DarkCyan
 }
 elseif ($hostMethod -match '^(?i)lan$') {
-    Write-Host "In‑game: Press F12, select the Fika.Core tab, and set 'Force IP' and 'Force Bind IP' to your LAN IP ($targetIP)." -ForegroundColor Cyan
+    Write-Host "In‑game: Press F12, select the Fika.Core tab, and set 'Force IP' and 'Force Bind IP' to your LAN IP ($targetIP)." -ForegroundColor DarkCyan
 }
 
 # Find and patch fika.jsonc
