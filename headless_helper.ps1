@@ -36,6 +36,7 @@ function Read-YesNo {
 
 Write-Host "This script assumes you've read the installation instructions for FIKA and have a working installation of FIKA."
 Write-Host "If you haven't done that yet, read about it here: https://project-fika.gitbook.io/wiki/installing-fika"
+Write-Host "It's HIGHLY RECOMMENDED to read the installation instructions for the headless client. This will help resolve errors you might come across, and contains very important information on configuration. Check it out here: https://project-fika.gitbook.io/wiki/advanced-features/headless-client"
 Write-Host "Then press Enter to continue installing and configuring the Headless server."
 Write-Host "Make sure you're using this script on the PC you'd like to be a headless client."
 Read-Host "Press Enter to continue..."
