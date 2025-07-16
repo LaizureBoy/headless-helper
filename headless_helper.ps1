@@ -326,7 +326,7 @@ else {
 
 
 # ————— Offer to copy the headless launch script —————
-if ( Read-YesNo "Copy headless*.ps1 from user\mods\fika-server\assets\scripts to SPT root?" ) {
+if ( Read-YesNo "Copy headless*.ps1 from user\mods\fika-server\assets\scripts to SPT root? You will launch the headless server from this file!" ) {
     # Use double‑quotes here to avoid any stray apostrophe issues:
     $srcDir = Join-Path $ScriptDir 'user\mods\fika-server\assets\scripts'
     if (-not (Test-Path $srcDir)) {
