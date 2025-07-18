@@ -1,358 +1,244 @@
-<#
-This PowerShell script automates downloading and installing the FIKA headless mod.
-Assumes you already have FIKA installed per instructions:
-https://project-fika.gitbook.io/wiki/installing-fika
-#>
+Write-Host "      ~~~~~Make sure this script is placed into an empty folder, named something like 'fika-headless'~~~~~" -ForegroundColor Red
+Write-Host
+Write-Host
+Write-Host "Here's a quick explanation of what the server, headless, and clients are in Fika:"  #Added this because I feel that people are fundamentally misunderstanding what each of these are on the gitbook instructions. Hell, maybe I do too! Input is welcome.
+Write-Host
+Write-Host "The 'Server' for Fika is the computer that runs the SPT Server.exe program, which is required to host the backend `nfeatures of SPT like your profiles, stash, traders and quests. 
+You must have a Server for anyone to connect to and play together. The Server typically uses mods that contain a 'mods' folder, and the Server (as well as all connecting players, including the headless client) are REQUIRED to have EFT `nand SPT installed. 
+Only the Server host needs to have these installed, but large mods like those that add weapons, will `ngenerate bundles that the players will have to download."
+Write-host "For more information, check this post on the discord: https://discord.com/channels/1202292159366037545/1234332919443488799/1235518309882007552" -ForegroundColor Yellow
+Write-Host
+Write-Host
+Write-Host "The 'Headless' is a 'player' that is used to host the raid. They're invisible and in the skybox, but they drastically `nimprove performance because the person that hosts the raid is the one that does all of the in-game calculations,
+which put a heavy strain on your computer. You can think of the headless client as just another player with `nsome extra configuration, except that there are some gameplay mods that you "  -NoNewline
+Write-Host "!!DO NOT WANT INSTALLED ON THE HEADLESS!!" -NoNewline -ForegroundColor Red
+Write-Host "`nCheck the gitbook installation instructions for more info: https://project-fika.gitbook.io/wiki/advanced-features/headless-client" -ForegroundColor Yellow
+Write-Host
+Write-Host
+Write-Host "Finally, the 'Client' is everyone who connects to the 'Server' computer. They run using the SPT Launcher.exe program. They require the same mods as each other (For simplicity's sake) in order for Fika to operate as usual. This includes yourself, your friends, and the headless client (with some exceptions)."
+Write-Host
+Read-Host "Press ENTER to continue, and choose your SPT Fika installation folder you want to copy the files from:"
 
-#region Elevation Check
-if (-not ([Security.Principal.WindowsPrincipal]::new(
-        [Security.Principal.WindowsIdentity]::GetCurrent()
-    )).IsInRole(
-        [Security.Principal.WindowsBuiltInRole]::Administrator
-    )) {
-    Write-Host "Relaunching with Administrator rights…" -ForegroundColor Yellow
-    Start-Process PowerShell `
-        -Verb RunAs `
-        -ArgumentList @(
-            '-NoExit',
-            '-ExecutionPolicy','Bypass',
-            '-File', "`"$PSCommandPath`""
-        )
-    exit
-}
-#endregion
+# Load WinForms for folder picker dialog
+Add-Type -AssemblyName System.Windows.Forms
 
-# ——————————————————————————————————————
-# Y/N prompt helper
-function Read-YesNo {
-    param([string]$Prompt)
-    do {
-        $resp = Read-Host "$Prompt (Y/N)"
-    } until ($resp -match '^[YyNn]$')
-    return $resp -match '^[Yy]$'
-}
-# ——————————————————————————————————————
+# Prompt the user to pick the FIKA installation folder
+$dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+$dlg.Description = 'Select your FIKA installation folder'
+$dlg.ShowNewFolderButton = $false
 
-
-Write-Host "This script assumes you've read the installation instructions for FIKA and have a working installation of FIKA."
-Write-Host "If you haven't done that yet, read about it here: https://project-fika.gitbook.io/wiki/installing-fika"
-Write-Host "It's HIGHLY RECOMMENDED to read the installation instructions for the headless client. This will help resolve errors you might come across, and contains very important information on configuration. Check it out here: https://project-fika.gitbook.io/wiki/advanced-features/headless-client"
-Write-Host "Then press Enter to continue installing and configuring the Headless server."
-Write-Host "Make sure you're using this script on the PC you'd like to be a headless client."
-Read-Host "Press Enter to continue..."
-
-# Determine script folder
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-Write-Host "Installing into: $ScriptDir"
-
-# Fetch latest headless release info from GitHub
-$apiUrl  = 'https://api.github.com/repos/project-fika/Fika-Headless/releases/latest'
-$release = Invoke-RestMethod -Uri $apiUrl -Headers @{ 'User-Agent' = 'PowerShell' }
-
-# Find the headless ZIP by matching “headless” (case‑insensitive) anywhere in the filename
-$asset = $release.assets |
-    Where-Object { $_.name -match '(?i)headless.*\.zip$' } |
-    Select-Object -First 1
-
-if (-not $asset) {
-    Write-Error "Could not find any headless .zip asset in the latest release. Available assets:"
-    $release.assets | ForEach-Object { Write-Host "  $_.name" }
-    exit 1
+if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+    Write-Host 'No folder selected. Exiting.' -foregroundcolor red
+    Start-Sleep -seconds 3 # I added a sleep so that it doesn't just instantly close if something happens.
+    return
 }
 
-Write-Host "Found headless asset: $($asset.name)"
+$sourcePath = $dlg.SelectedPath
+Write-Host "Selected installation folder: '$sourcePath'" -foregroundcolor green
 
-
-# Download the zip
-$zipPath = Join-Path $ScriptDir $asset.name
-Write-Host "Downloading $($asset.name)..."
-Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zipPath
-
-# Extract into script directory
-Write-Host "Extracting contents into $ScriptDir..."
-Expand-Archive -Path $zipPath -DestinationPath $ScriptDir -Force
-Remove-Item $zipPath
-Write-Host "Extraction complete." -ForegroundColor Green
-
-# Scan for incompatible mods
-$searchPaths = @(
-    Join-Path $ScriptDir 'BepInEx\plugins'
-    Join-Path $ScriptDir 'user\mods'
-) | Where-Object { Test-Path $_ }
-
-
-# Define incompatible mods and their messages
-$incompatList = @{
-    'Raid Overhaul'           = 'Raid Overhaul - certain settings are not compatible with Fika. Still in testing.'
-    'Declutter'               = 'Declutter - Works in some cases, others not. Test it for yourself.'
-    'Profile Editor'          = 'Profile Editor - it can corrupt presets. Use at your own peril.'
-    'Pity Loot'               = 'Pity Loot - breaks scav runs.'
-    'Friendly PMCs'           = 'Friendly PMCs - not friendly when >1 player. Can cause weird errors.'
-    "That's Lit"             = "That's Lit - needs the sync add-on otherwise you'll see a significant fps drop. NOTE: we have had reports of crashes for SOME. Test and see."
-    'Loot Radius'             = 'Loot Radius - currently not working with latest Fika. Will sometimes only allow you to view but not take or drop items.'
-    'Loot Value'              = 'Loot Value - will lag the game out the longer raid goes on.'
-    'Various Hardcore Starts'  = 'Various Hardcore Starts - prevents the dedicated client from generating the .bat file.'
-    'Boss Notifier'           = 'Boss Notifier - only works accurately for raid host but not for clients.'
-}
-
-# Scan and report
-$found = Get-ChildItem -Path $searchPaths -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-    foreach ($mod in $incompatList.Keys) {
-        if ($_.Name -match [regex]::Escape($mod)) { [PSCustomObject]@{ Path = $_.FullName; Mod = $mod } }
-    }
-}
-
-if ($found) {
-    Write-Host "`nIncompatible mods detected:" -ForegroundColor Yellow
-    foreach ($item in $found) {
-        Write-Host "  $($item.Mod) - $($incompatList[$item.Mod])" -ForegroundColor Yellow
-        Write-Host "    Path: $($item.Path)"
-    }
-    Write-Host "Please remove these mods before running the headless client." -ForegroundColor Yellow
-} else {
-    Write-Host "No known incompatible mods detected." -ForegroundColor Green
-}
-
-# ————————————————
-# Ask how they’re hosting and pick the right IP
-$hostMethod = Read-Host "How are you hosting the server? (Enter VPN, LAN, or Port)"
-$method     = $hostMethod.ToLower()
-
-switch ($method) {
-    'lan' {
-        # Grab the first non-loopback IPv4 on the machine
-        $targetIP = (Get-NetIPAddress -AddressFamily IPv4 |
-            Where-Object { $_.IPAddress -notmatch '^(127\.0\.0\.1|169\.254\.)' } |
-            Select-Object -First 1 -ExpandProperty IPAddress)
-        Write-Host "Using local IPv4 address: $targetIP" -ForegroundColor Cyan
-    }
-
-    'vpn' {
-        # Prompt until they enter a valid IPv4
-        do {
-            $targetIP = Read-Host "Enter the VPN IPv4 address"
-        } until ($targetIP -match '^\d{1,3}(?:\.\d{1,3}){3}$')
-        Write-Host "Using VPN IP: $targetIP" -ForegroundColor Cyan
-    }
-
-    'port' {
-        # Use 0.0.0.0 here; the start_headless patcher will swap in the real local IP
-        $targetIP = '0.0.0.0'
-        Write-Host "Using placeholder IP $targetIP (will be replaced in start_headless scripts)" -ForegroundColor Yellow
-    }
-
-    default {
-        Write-Warning "Unknown hosting method; defaulting to LAN."
-        # Repeat LAN logic:
-        $targetIP = (Get-NetIPAddress -AddressFamily IPv4 |
-            Where-Object { $_.IPAddress -notmatch '^(127\.0\.0\.1|169\.254\.)' } |
-            Select-Object -First 1 -ExpandProperty IPAddress)
-        Write-Host "Using local IPv4 address: $targetIP" -ForegroundColor Cyan
-    }
-}
-
-
-# — Ensure scripts.forceIp is set correctly — 
-if ($content -match '"scripts"\s*:\s*{') {
-    # 1) Replace an existing but empty or incorrect forceIp line
-    $content = [regex]::Replace(
-        $content,
-        '("scripts"\s*:\s*{[\s\S]*?)"forceIp"\s*:\s*".*?"([\s\S]*?})',
-        "`$1`"forceIp`": `"$targetIp`"`$2",
-        [System.Text.RegularExpressions.RegexOptions]::Singleline
+# Function to wait for fika.jsonc to exist
+function Wait-ForFikaConfig {
+    param(
+        [string]$configPath
     )
-
-    # 2) If forceIp still isn’t present at all, inject it immediately after the “scripts”: { line
-    if ($content -notmatch '"forceIp"\s*:') {
-        $content = $content -replace '("scripts"\s*:\s*{)',
-            "`$1`r`n        `"forceIp`": `"$targetIp`","
+    while (-not (Test-Path $configPath)) {
+        Write-Host "fika.jsonc not found at '$configPath', `nhave you installed fika on the server yet?" -ForegroundColor Red
+        Read-Host 'Press Enter after installing to recheck.' | Out-Null
     }
 }
 
+# Define and wait for fika.jsonc before proceeding
+$configPath = Join-Path -Path $sourcePath -ChildPath 'user\mods\fika-server\assets\configs\fika.jsonc'
+Wait-ForFikaConfig -configPath $configPath
 
-# Locate the JSONC file (only once, earlier in your script)
-$jsonc = Get-ChildItem -Path $ScriptDir -Recurse -Filter 'fika.jsonc' -ErrorAction SilentlyContinue | Select-Object -First 1
 
-
-# ==== Safe write‑back ====
-if (-not $jsonc -or [string]::IsNullOrWhiteSpace($jsonc.FullName)) {
-    Write-Warning "Could not locate fika.jsonc under '$ScriptDir'. Skipping write‑back."
-}
-elseif ([string]::IsNullOrWhiteSpace($content)) {
-    Write-Warning "Modified content is empty (length $($content.Length)). Skipping write‑back to avoid wiping the file."
-}
-else {
-    Write-Host "Writing updated JSONC to: $($jsonc.FullName) (content length $($content.Length))" -ForegroundColor Cyan
-    [System.IO.File]::WriteAllText(
-        $jsonc.FullName,
-        $content,
-        [System.Text.UTF8Encoding]::new($false)
-    )
-    Write-Host "fika.jsonc updated successfully." -ForegroundColor Green
+# Verify profiles folder exists under user\profiles
+$profileFolder = Join-Path $sourcePath 'user\profiles'
+if (-not (Test-Path $profileFolder -PathType Container)) {
+    Write-Host "Profiles folder not found at '$profileFolder'. Exiting." -foregroundcolor red
+    Start-Sleep -seconds 3 
+    return
 }
 
-
-
-# In‑game F12 reminder based on hosting type
-if ($hostMethod -match '^(?i)vpn$') {
-    Write-Host "In‑game: Press F12, select the Fika.Core tab, and set 'Force IP' and 'Force Bind IP' to your VPN IP ($targetIP)." -ForegroundColor DarkCyan
-}
-elseif ($hostMethod -match '^(?i)lan$') {
-    Write-Host "In‑game: Press F12, select the Fika.Core tab, and set 'Force IP' and 'Force Bind IP' to your LAN IP ($targetIP)." -ForegroundColor DarkCyan
-}
-
-# Find and patch fika.jsonc
-$jsonc = Get-ChildItem -Path $ScriptDir -Recurse -Filter 'fika.jsonc' |
-         Select-Object -First 1
-if ($jsonc) {
-    Write-Host "Updating `"$($jsonc.FullName)`" to use IP $targetIp..."
-    $content = Get-Content $jsonc.FullName -Raw
-    # build replacements
-    $ipRepl    = '"ip": "'       + $targetIp + '"'
-    $backRepl  = '"backendIp": "' + $targetIp + '"'
-    $forceRepl = '"forceIp": "'   + $targetIp + '"'
-    $amtRepl   = '"amount": 1'
-    # apply each with exactly two args
-    $content = $content -replace '"ip"\s*:\s*".*?"',       $ipRepl
-    $content = $content -replace '"backendIp"\s*:\s*".*?"', $backRepl
-    $content = $content -replace '"forceIp"\s*:\s*".*?"',   $forceRepl
-    $content = $content -replace '"amount"\s*:\s*\d+',     $amtRepl
-    # write back without BOM
-    [System.IO.File]::WriteAllText(
-        $jsonc.FullName,
-        $content,
-        [System.Text.UTF8Encoding]::new($false)
-    )
-    Write-Host "fika.jsonc updated successfully." -ForegroundColor Green
-} else {
-    Write-Warning "Could not find a fika.jsonc to update."
-}
-# ————————————————
-
-# Offer to open FIKA ports
-if (Read-YesNo "Open inbound ports UDP 25565 and TCP 6969?") {
-    # UDP 25565
-    if (-not (Get-NetFirewallRule -Name 'FIKA_UDP_25565' -ErrorAction SilentlyContinue)) {
-        New-NetFirewallRule `
-            -Name 'FIKA_UDP_25565' `
-            -DisplayName 'FIKA UDP 25565' `
-            -Direction Inbound `
-            -Protocol UDP `
-            -LocalPort 25565 `
-            -Action Allow
-        Write-Host "Created firewall rule FIKA_UDP_25565." -ForegroundColor Green
-    }
-    else {
-        Write-Host "Firewall rule FIKA_UDP_25565 already exists." -ForegroundColor Yellow
-    }
-
-    # TCP 6969
-    if (-not (Get-NetFirewallRule -Name 'FIKA_TCP_6969' -ErrorAction SilentlyContinue)) {
-        New-NetFirewallRule `
-            -Name 'FIKA_TCP_6969' `
-            -DisplayName 'FIKA TCP 6969' `
-            -Direction Inbound `
-            -Protocol TCP `
-            -LocalPort 6969 `
-            -Action Allow
-        Write-Host "Created firewall rule FIKA_TCP_6969." -ForegroundColor Green
-    }
-    else {
-        Write-Host "Firewall rule FIKA_TCP_6969 already exists." -ForegroundColor Yellow
-    }
-}
-else {
-    Write-Host "Skipping firewall configuration." -ForegroundColor Yellow
-}
-
-# ————————————————
-
-# Update start_headless*.ps1 to point at the correct backend IP and port
-
-$startScripts = Get-ChildItem -Path $ScriptDir -Filter 'start_headless*.ps1' -Recurse -ErrorAction SilentlyContinue
-if ($startScripts) {
-
-    # 1) Determine port from fika.jsonc (fallback to 6969)
-    $jsonc = Get-ChildItem -Path $ScriptDir -Recurse -Filter 'fika.jsonc' | Select-Object -First 1
-    if ($jsonc) {
-        $raw   = Get-Content $jsonc.FullName -Raw
-        $m     = [regex]::Match($raw, '"port"\s*:\s*(\d+)')
-        if ($m.Success) { 
-    $port = $m.Groups[1].Value 
-} else { 
-    $port = '6969' 
-}
-
-    }
-    else {
-        Write-Warning "Could not find fika.jsonc; defaulting port to 6969."
-        $port = '6969'
-    }
-
-    # 2) Pick IP to use in the script:
-    #    - If hostMethod is “Port”, use local IPv4
-    #    - Otherwise use the user’s chosen targetIP (VPN or LAN)
-    if ($hostMethod -match '^(?i)port$') {
-        $backendIp = (Get-NetIPAddress -AddressFamily IPv4 `
-                         | Where-Object {
-                             $_.IPAddress -notmatch '^(127\.0\.0\.1|169\.254\.)'
-                         } `
-                         | Select-Object -First 1 -ExpandProperty IPAddress)
-        Write-Host "Using local IPv4 for Port mode: $backendIp" -ForegroundColor Cyan
-    }
-    else {
-        $backendIp = $targetIP
-        Write-Host "Using chosen IP for $hostMethod mode: $backendIp" -ForegroundColor Cyan
-    }
-
-    # 3) Patch each start_headless script
-    foreach ($script in $startScripts) {
-        Write-Host "Patching $($script.Name) → https://$backendIp`:$port" -ForegroundColor Cyan
-
-        $lines       = Get-Content $script.FullName
-        $backendLine = '$BackendUrl = "https://' + $backendIp + ':' + $port + '"'
-
-        # Two-argument replace: pattern + one replacement string
-        $patched     = $lines -replace '^\s*\$BackendUrl\s*=.*', $backendLine
-
-        # Write it back
-        Set-Content -Path $script.FullName -Value $patched -Encoding UTF8
-    }
-
-    Write-Host "Updated BackendUrl (with port) in $($startScripts.Count) script(s)." -ForegroundColor Green
-}
-else {
-    Write-Warning "No start_headless*.ps1 scripts found to patch."
-}
-
-
-# ————— Offer to copy the headless launch script —————
-if ( Read-YesNo "Copy headless*.ps1 from user\mods\fika-server\assets\scripts to SPT root? You will launch the headless server from this file!" ) {
-    # Use double‑quotes here to avoid any stray apostrophe issues:
-    $srcDir = Join-Path $ScriptDir 'user\mods\fika-server\assets\scripts'
-    if (-not (Test-Path $srcDir)) {
-        Write-Warning "Source folder not found: $srcDir"
-    }
-    else {
-        $headlessScript = Get-ChildItem `
-            -Path $srcDir `
-            -Filter "headless*.ps1" `
-            -Recurse `
-            -ErrorAction SilentlyContinue |
-          Select-Object -First 1
-
-        if ($headlessScript) {
-            Copy-Item $headlessScript.FullName -Destination $ScriptDir -Force
-            Write-Host "Copied $($headlessScript.Name) to $ScriptDir" -ForegroundColor Green
+# Function to find JSON profiles whose password is 'fika-headless'
+function Get-HeadlessProfiles {
+    param($folder)
+    Get-ChildItem -Path $folder -Filter '*.json' -File -Recurse | Where-Object {
+        try {
+            (Get-Content -Path $_.FullName -Raw) -match '"password"\s*:\s*"fika-headless"'
+        } catch {
+            $false
         }
-        else {
-            Write-Warning "No headless*.ps1 file found in $srcDir"
+    } | ForEach-Object {
+        [PSCustomObject]@{
+            FileName = $_.Name
+            FullPath = $_.FullName
         }
     }
 }
-else {
-    Write-Host "Skipping headless script copy." -ForegroundColor Yellow
+
+# Loop until at least one headless profile is detected
+$found = @()
+while ($found.Count -eq 0) {
+    $found = Get-HeadlessProfiles -folder $profileFolder
+    if ($found.Count -gt 0) { break }
+
+    # No profiles yet: update fika.jsonc "amount" to 1
+    $configPath = Join-Path $sourcePath 'user\mods\fika-server\assets\configs\fika.jsonc'
+    if (Test-Path $configPath) {
+        (Get-Content -Path $configPath -Raw) -replace '"amount"\s*:\s*\d+', '"amount": 1' |
+            Set-Content -Path $configPath
+        Write-Host "Set 'amount' to 1 in '$configPath'" -foregroundcolor green
+    } else {
+        Write-Host "Config file not found at '$configPath'. Have you installed Fika yet and ran the server?" -foregroundcolor red
+    }
+
+    Write-Host "No headless profiles detected. Please start the SPT Server and wait until you see 'Happy Playing!!' `nPress Enter to rescan.'" -foregroundcolor red
+    Read-Host | Out-Null
 }
 
-Write-Host "Headless installation, configuration and compatibility scan complete. Make sure to update the URL in your SPT Launcher in the settings, development options! Remember to include https:// and the port! e.g https://192.168.1.1:6969 Enjoy FIKA!"
+# Display detected profiles
+Write-Host "`nDetected headless profiles:`n" -foregroundcolor green
+for ($i = 0; $i -lt $found.Count; $i++) {
+    Write-Host ("  {0}) {1}" -f ($i + 1), $found[$i].FileName) -ForegroundColor Green
+}
 
+# Prompt the user to select a profile
+$selection = Read-Host "Choose a profile by number (1-$($found.Count))" 
+if (-not [int]::TryParse($selection, [ref]$null) -or [int]$selection -lt 1 -or [int]$selection -gt $found.Count) {
+    Write-Host 'Invalid selection. Exiting.' -foregroundcolor red
+    Start-Sleep -seconds 3 
+    return
+}
+$chosen = $found[[int]$selection - 1]
+Write-Host ("You selected: {0}" -f $chosen.FileName)
+
+Write-Host "Press Enter to begin copying your files!" -ForegroundColor Yellow
+Read-Host
+
+$src = $sourcePath.TrimEnd('\\')
+$dst = (Get-Location).Path.TrimEnd('\\')
+Write-Host "Starting Robocopy from '$src' to '$dst'..." -ForegroundColor Green
+# STOP DELETING THE SCRIPT GODDAMN YOU
+$exitCode = & robocopy "$src" "$dst" /E /MT:8 /Z /R:1 /W:1
+
+
+# Integrity check on Assembly-CSharp.dll
+$asmPath = Join-Path $sourcePath 'EscapeFromTarkov_Data\Managed\Assembly-CSharp.dll'
+$expectedHash = '12D5FD1728C58A9CD71A454FB5EAE506B5A0A3C2BB35D543C4022800E10F47D5'
+if (Test-Path $asmPath) {
+    try {
+        $actualHash = (Get-FileHash -Path $asmPath -Algorithm SHA256).Hash
+    } catch {
+        Write-Host "Failed to compute hash for $asmPath"
+        Read-Host 'Press Enter to continue...'
+    }
+    if ($actualHash -ne $expectedHash) {
+        Write-Host "Assembly-CSharp.dll hash mismatch. Expected: $expectedHash";
+        Write-Host "Actual:   $actualHash";
+        Write-Host 'Please start the SPT Launcher at least once to generate the correct DLL, then press Enter to continue.'
+        Read-Host | Out-Null
+    } else {
+        Write-Host 'Assembly-CSharp.dll integrity verified. Hash: '$actualHash'' -ForegroundColor Green
+    }
+} 
+
+# Incompatibility Checker in mods and plugins folders
+$incompat = @{
+    'Raid Overhaul'            = 'Certain settings are not compatible with Fika. Still in testing.'
+    'Declutter'                = 'Works in some cases, others not. Test it for yourself.'
+    'Profile Editor'           = 'Can corrupt presets. Use at your own peril.'
+    'Pity Loot'                = 'Breaks scav runs.'
+    'Friendly PMCs'            = 'Not friendly when >1 player; may cause weird errors.'
+    "That's Lit"              = 'Needs the sync add-on (Check Pins) or significant FPS drop.'
+    'LootRadius'              = 'Not working with latest Fika; view-only issues.'
+    'LootValue'               = 'Will lag game the longer raid goes on.'
+    'Various Hardcore Starts*'  = 'Prevents dedicated client from generating the .bat file.'
+    'Boss Notifier*'            = 'Only accurate for raid host, not clients.'
+    'Amands Graphics'          = 'Useless for the headless server.'
+    'MoreCheckmarks'           = 'Client mod that reduces performance'
+    'EFTApi'                   = ''
+    'Game Panel Hud'             = 'Client mod that reduces perfomance.'
+    'Dynamic Maps'              = 'Client mod that reduces perfomance.'
+    'Ram Cleaner Interval'     = 'Client mod that reduces perfomance.'
+}
+# Scan user\mods for incompatible mod folders (including all subfolders)
+$modDir = Join-Path $sourcePath 'user\mods'
+if (Test-Path $modDir) {
+    Write-Host "`nScanning user\mods for incompatible folders..."
+    Get-ChildItem -Path $modDir -Recurse -Directory | ForEach-Object {
+        $name = $_.Name
+        foreach ($mod in $incompat.Keys) {
+            # build a wildcard pattern from the mod key (splitting on spaces)
+            $pattern = '*' + ($mod -split '\s+' -join '*') + '*'
+            if ($name -ilike $pattern) {
+                Write-Host "Delete this mod from the headless client or you WILL have issues."
+                Write-Host "WARNING: Incompatible mod detected: $mod" 
+                Write-Host "Path: $($_.FullName)"
+                if ($incompat[$mod]) { Write-Host "  Note: $($incompat[$mod])" }
+            }
+        }
+    }
+} else {
+    Write-Host "Mods folder not found at '$modDir'"
+}
+
+# Scan BepInEx\plugins for incompatible plugin DLLs (including all subfolders)
+$pluginDir = Join-Path $sourcePath 'BepInEx\plugins'
+if (Test-Path $pluginDir) {
+    Write-Host "`nScanning BepInEx\plugins for incompatible DLLs..."
+    Get-ChildItem -Path $pluginDir -Recurse -Filter '*.dll' -File | ForEach-Object {
+        $name = $_.Name
+        foreach ($mod in $incompat.Keys) {
+            $pattern = '*' + ($mod -split '\s+' -join '*') + '*'
+            if ($name -ilike $pattern) {
+                Write-Host "WARNING: Incompatible plugin detected: Delete this from the headless server or you WILL have problems!" -ForegroundColor Red
+                Write-Host "  File: $($_.Name)" -ForegroundColor Red
+                Write-Host "  Path: $($_.FullName)" -ForegroundColor Red
+                if ($incompat[$mod]) { Write-Host "  Note: $($incompat[$mod])" -ForegroundColor Red}
+            }
+        }
+    }
+} else {
+    Write-Host "Plugin folder not found at '$pluginDir'"
+}
+
+# AHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH WHY IS THE SCRIPT DELETING ITSELF
+Write-Host 'Downloading and extracting latest Fika-Headless release...'
+try {
+    # Get latest release metadata
+    $release = Invoke-RestMethod -UseBasicParsing -Uri 'https://api.github.com/repos/project-fika/Fika-Headless/releases/latest'
+    $asset = $release.assets | Where-Object { $_.name -match 'fika\.headless.*\.zip' } | Select-Object -First 1
+
+    # Setup temp paths
+    $tmpBase = Join-Path $env:TEMP 'fika_headless'
+    $tmpZip = Join-Path $tmpBase $asset.name
+    $tmpDir = Join-Path $tmpBase ([Guid]::NewGuid().ToString())
+    New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+
+    Write-Host "Downloading $($asset.name) to temp folder..."
+    Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile $tmpZip
+
+    Write-Host "Extracting to temp folder..."
+    Expand-Archive -LiteralPath $tmpZip -DestinationPath $tmpDir -Force
+
+    # Copy to script directory, excluding any .ps1 to protect script
+    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+    Write-Host "Copying extracted files to '$scriptDir' (excluding PS1)..."
+    Copy-Item -Path (Join-Path $tmpDir '*') -Destination $scriptDir -Recurse -Force -Exclude '*.ps1'
+
+    # Cleanup
+    Write-Host 'Cleaning up temporary files...'
+    Remove-Item -Path $tmpBase -Recurse -Force
+
+    Write-Host 'Headless release extraction complete.'
+} catch {
+    Write-Error ("Failed headless download/extract: {0}" -f $_)
+}
+
+Write-Host "Now we need to set up your IP addresses correctly."
+Read-Host ""
+
+
+Write-Host "All done! Copy the entire folder that this script is located in to the PC you want the headless server to run on, and you should be good to go!" -ForegroundColor DarkGreen
+Read-Host "Press Enter to close."
