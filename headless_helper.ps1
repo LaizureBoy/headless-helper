@@ -1,11 +1,10 @@
 Write-Host "      ~~~~~Make sure this script is placed into an empty folder, named something like 'fika-headless'~~~~~" -ForegroundColor Red
 Write-Host
-Write-Host
 Write-Host "               Here's a quick explanation of what the server, headless, and clients are in Fika:"  #Added this because I feel that people are fundamentally misunderstanding what each of these are on the gitbook instructions. Hell, maybe I do too! Input is welcome.
 Write-Host
 Write-Host "The 'Server' for Fika is the computer that runs the SPT Server.exe program, which is required to host the backend `nfeatures of SPT like your profiles, stash, traders and quests. 
 You must have a Server for anyone to connect to and play together. The Server typically uses mods that contain a 'mods' folder, and the Server (as well as all connecting players, including the headless client) are REQUIRED to have EFT `nand SPT installed. 
-Only the Server host needs to have these installed, but large mods like those that add weapons, will `ngenerate bundles that the players will have to download. "
+Only the Server host needs most mods installed, but large mods, like those that add weapons, will `ngenerate bundles that the players will have to download. "
 Write-Host
 Write-host "    For more information, check this post on the discord: https://discord.com/channels/1202292159366037545/1234332919443488799/1235518309882007552  " -ForegroundColor Yellow
 Write-Host
@@ -18,7 +17,7 @@ Write-Host
 Write-Host "Check the gitbook installation instructions for more info: https://project-fika.gitbook.io/wiki/advanced-features/headless-client" -ForegroundColor Yellow
 Write-Host
 Write-Host
-Write-Host "Finally, the 'Client' is everyone who connects to the 'Server' computer. They run using the SPT Launcher.exe program. They require the same mods as each other (For simplicity's sake) in order for Fika to operate as usual. This includes yourself, your friends, and the headless client (with some exceptions)."
+Write-Host "Finally, the 'Client' is everyone who connects to the 'Server' computer. They run using the SPT Launcher.exe program. They require the same mods as each other (For simplicity sake) in order for Fika to operate as usual. This includes yourself, your friends, and the headless client (with some exceptions)."
 Write-Host
 Read-Host "Press ENTER to continue, and choose your SPT Fika installation folder you want to copy the files from"
 
@@ -64,7 +63,7 @@ if ((Test-Path $asmPath) -and (Test-Path $bakPath)) {
         Write-Host 'Assembly-CSharp.dll has been patched correctly!' -ForegroundColor Green
         Write-Host "  Original: $asmPath"
         Write-Host "  Backup:   $bakPath"
-        Read-Host 'Press Enter to continue...' | Out-Null
+        Out-Null
     }
 } else {
     if (-not (Test-Path $asmPath)) { Write-Host "Original DLL not found: $asmPath" -ForegroundColor Red }
@@ -93,7 +92,7 @@ Write-Host
 # Verify profiles folder exists under user\profiles
 $profileFolder = Join-Path $sourcePath 'user\profiles'
 if (-not (Test-Path $profileFolder -PathType Container)) {
-    Write-Host "Profiles folder not found at '$profileFolder'. Exiting." -foregroundcolor red
+    Write-Host "Profiles folder not found at '$profileFolder'. Was SPT Installed correctly?" -foregroundcolor red
     Start-Sleep -seconds 3 
     return
 }
@@ -126,14 +125,14 @@ while ($found.Count -eq 0) {
     # No profiles yet: update fika.jsonc "amount" to 1
     $configPath = Join-Path $sourcePath 'user\mods\fika-server\assets\configs\fika.jsonc'
     if (Test-Path $configPath) {
-        (Get-Content -Path $configPath -Raw) -replace '"amount"\s*:\s*\d+', '"amount": 2' |
+        (Get-Content -Path $configPath -Raw) -replace '"amount"\s*:\s*\d+', '"amount": 1' |
             Set-Content -Path $configPath
         Write-Host "Set 'amount' to 1 in '$configPath'" -foregroundcolor green
     } else {
         Write-Host "Config file not found at '$configPath'. Have you installed Fika yet and ran the server?" -foregroundcolor red
     }
 
-    Write-Host "No headless profiles detected. `nPlease start the SPT Server in the folder you chose above and wait until you see 'Happy Playing!!' `nPress Enter to rescan." -foregroundcolor red
+    Write-Host "No headless profiles detected. `nPlease start the SPT Server in the folder you chose above and wait until you see 'Created 1 headless client profiles!' `nPress Enter to rescan." -foregroundcolor red
     Read-Host | Out-Null
 }
 
@@ -143,6 +142,8 @@ Write-Host "`nDetected headless profiles:`n" -ForegroundColor Green
 for ($i = 0; $i -lt $found.Count; $i++) {
     Write-Host ("  {0}) {1}" -f ($i + 1), $found[$i].Name) -ForegroundColor Green 
 }
+
+Write-Host
 
 # Prompt the user to select a profile
 do {
@@ -156,29 +157,85 @@ do {
 # Once we have a good selection:
 $chosen = $found[[int]$selection - 1]
 Write-Host
-Write-Host ("You selected: {0}" -f $chosen.FileName)
+Write-Host ("You selected:" -f $chosen.FileName)
+
+Write-Host
+
+# Prompt to name headless profile
+$aliasChoice = Read-Host "Would you like to set a custom name for this headless profile? (Y/N)"
+if ($aliasChoice -match '^[Yy]$') {
+    $customAlias = Read-Host "Enter custom name for headless profile"
+    $profileBase = [IO.Path]::GetFileNameWithoutExtension($chosen.Name)
+    $configPath = Join-Path $sourcePath 'user\mods\fika-server\assets\configs\fika.jsonc'
+    if (Test-Path $configPath) {
+        # Read raw JSONC text
+        $content = Get-Content -Raw -Path $configPath
+
+        if ($content -match '"aliases"\s*:\s*\{') {
+            # Inject the new alias into existing aliases block
+            $content = $content -replace '("aliases"\s*:\s*\{)', "`$1`n    `"$profileBase`": `"$customAlias`""
+        } else {
+            # Insert a new aliases block under "profiles"
+            $content = $content -replace '("profiles"\s*:\s*\{)', "`$1`n    `"aliases`": {`n        `"$profileBase`": `"$customAlias`"`n    },"
+        }
+
+        # Write back without upsetting comments
+        Set-Content -Path $configPath -Value $content
+        Write-Host "Set alias for $profileBase to $customAlias in fika.jsonc" -ForegroundColor Green
+    } else {
+        Write-Warning "fika.jsonc not found at $configPath"
+    }
+} else {
+    Write-Host "Skipping custom alias setup."
+}
+
+Write-Host
 
 # Ask if the server is hosted elsewhere
 do {
     $remote = Read-Host "Are you hosting the server on another computer? (Y/N)"
-    if ($remote -match '^[Yy]$') {
-        # Tell them to copy the chosen profile
-        Write-Host "`nPlease copy the selected profile file to the server PC's 'user\profiles' folder."
-        # Open the folder containing that profile
-        $profilePath = $found[[int]$selection - 1].FullName
-        Write-Host "Opening folder: $(Split-Path $profilePath)" -ForegroundColor Green
-        Invoke-Item (Split-Path $profilePath)
-        Write-Host ""  # blank line
-        break
-    }
-    elseif ($remote -match '^[Nn]$') {
-        # Local host—just continue
+    if ($remote -match '^[Yy]$' -or $remote -match '^[Nn]$') {
+
+        # Only prompt for IP:Port if remote
+        if ($remote -match '^[Yy]$') {
+            $ipPort = Read-Host 'Enter the remote server IP:Port (e.g. 192.168.1.100:6969)'
+        } else {
+            # Local backend – no prompt
+            $ipPort = '127.0.0.1:6969'
+            Write-Host "`nAssuming local backend at $ipPort. You can edit the headless startup script's backendUrl if incorrect."
+        }
+
+        # Update the Start_headless_<Profile>.ps1 file
+        $profileBase    = [IO.Path]::GetFileNameWithoutExtension($chosen.Name)
+        $scriptDir      = Join-Path $sourcePath 'user\mods\fika-server\assets\scripts'
+        $startScript    = "Start_headless_$profileBase.ps1"
+        $startScriptPath= Join-Path $scriptDir $startScript
+
+        if (Test-Path $startScriptPath) {
+            $pattern     = '\$BackendUrl\s*=\s*".*"'
+            $replacement = "`$BackendUrl = `"https://$ipPort`""
+            (Get-Content $startScriptPath) -replace $pattern, $replacement |
+                Set-Content $startScriptPath
+            Write-Host "Updated $startScript with BackendUrl https://$ipPort" -ForegroundColor Green
+
+            # Copy it next to this setup script
+            $currentDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+            Copy-Item $startScriptPath -Destination $currentDir -Force
+            Write-Host "Copied $startScript to $currentDir" -ForegroundColor Green
+        } else {
+            Write-Warning "Could not find $startScript in $scriptDir"
+        }
+
         break
     }
     else {
         Write-Host "Invalid input. Please enter Y or N." -ForegroundColor Yellow
     }
 } while ($true)
+
+Write-Host
+
+Write-Host "I've moved the Start_headless_$profileBase to the root of this folder. Make sure that it's started from the headless computer and not the server PC!" -ForegroundColor DarkGreen
 
 Write-Host
 
@@ -195,20 +252,6 @@ if ($exitCode -lt 8) {
     Write-Host "Copy completed successfully." -ForegroundColor Green
 } else {
     Write-Warning "Robocopy reported errors. Exit code: $exitCode."
-}
-
-# Find and copy headless script
-$scriptDir = Join-Path $sourcePath 'user\mods\fika-server\assets\scripts'
-$item = Get-ChildItem $scriptDir -Recurse -Filter 'Start_headless_*' -File | Select-Object -First 1
-if (-not $item) { Write-Warning "No Start_headless_* script found in $scriptDir" } else {
-    $headlessScript = $item.FullName; Write-Host "Found script: $headlessScript"
-    $ipPort = Read-Host 'Enter IP:Port (e.g. 127.0.0.1:443) that your SPT Server is using'
-    $backendUrl = "https://$ipPort"
-    $pattern = '\$BackendUrl\s*=\s*".*"'
-    $replacement = "`$BackendUrl = `"$backendUrl`""
-    (Get-Content $headlessScript) -replace $pattern, $replacement | Set-Content $headlessScript
-    Write-Host "Updated BackendUrl to $backendUrl"
-    Copy-Item $headlessScript -Destination (Split-Path -Parent $MyInvocation.MyCommand.Path) -Force
 }
 
 Write-Host
