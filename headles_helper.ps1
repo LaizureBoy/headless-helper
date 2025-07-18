@@ -97,98 +97,118 @@ if (-not (Test-Path $profileFolder -PathType Container)) {
     return
 }
 
-Write-Host
-
-# Find headless profiles
 function Get-HeadlessProfiles {
     param(
         [string]$folder
     )
+    $root = (Get-Item $folder).FullName.TrimEnd('\')
 
-    Get-ChildItem -Path $folder -Recurse -Filter '*.json' -File |
-    Where-Object {
+    function Test-HeadlessProfile($file) {
         try {
-            (Get-Content -Path $_.FullName -Raw) -match '"password"\s*:\s*"fika-headless"'
+            $content = Get-Content -Path $file.FullName -Raw
+            return ($file.DirectoryName.TrimEnd('\') -eq $root -and $content -match '"password"\s*:\s*"fika-headless"')
         } catch {
-            $false
+            return $false
         }
     }
-}
 
-
-# Loop until at least one headless profile is detected
-$found = @()
-while ($found.Count -eq 0) {
-    $found = Get-HeadlessProfiles -folder $profileFolder
-    if ($found.Count -gt 0) { break }
-
-    # No profiles yet: update fika.jsonc "amount" to 1
-    $configPath = Join-Path $sourcePath 'user\mods\fika-server\assets\configs\fika.jsonc'
-    if (Test-Path $configPath) {
-        (Get-Content -Path $configPath -Raw) -replace '"amount"\s*:\s*\d+', '"amount": 1' |
-            Set-Content -Path $configPath
-        Write-Host "Set 'amount' to 1 in '$configPath'" -foregroundcolor green
-    } else {
-        Write-Host "Config file not found at '$configPath'. Have you installed Fika yet and ran the server?" -foregroundcolor red
-    }
-
-    Write-Host "No headless profiles detected. `nPlease start the SPT Server in the folder you chose above and wait until you see 'Created 1 headless client profiles!' `nPress Enter to rescan." -foregroundcolor red
-    Read-Host | Out-Null
+    Get-ChildItem -Path $folder -Recurse -Filter '*.json' -File | Where-Object { Test-HeadlessProfile $_ }
 }
 
 Write-Host
 
-Write-Host "`nDetected headless profiles:`n" -ForegroundColor Green
-for ($i = 0; $i -lt $found.Count; $i++) {
-    Write-Host ("  {0}) {1}" -f ($i + 1), $found[$i].Name) -ForegroundColor Green 
-}
-
-Write-Host
-
-# Prompt the user to select a profile
 do {
-    $selection = Read-Host "Choose a profile by number (1-$($found.Count))"
-    if ([int]::TryParse($selection, [ref]0) -and [int]$selection -ge 1 -and [int]$selection -le $found.Count) {
-        break
+    # 0) always re-scan the profiles folder
+    $found = Get-HeadlessProfiles -folder $profileFolder
+
+    # 1) display them
+    Write-Host "`nDetected headless profiles:`n" -ForegroundColor Green
+    for ($i = 0; $i -lt $found.Count; $i++) {
+        Write-Host ("  {0}) {1}" -f ($i + 1), $found[$i].Name) -ForegroundColor Green 
     }
-    Write-Host 'Invalid selection. Please try again.' -ForegroundColor Red
+    $createOption = $found.Count + 1
+    Write-Host ("  {0}) Create a new profile" -f $createOption) -ForegroundColor Yellow
+    Write-Host
+
+    # 2) prompt for selection
+    [int]$choice = 0
+    do {
+        $selection = Read-Host "Choose a profile by number (1-$createOption)"
+        if ([int]::TryParse($selection, [ref]$choice) -and $choice -ge 1 -and $choice -le $createOption) {
+            break
+        }
+        Write-Host 'Invalid selection. Please try again.' -ForegroundColor Red
+    } while ($true)
+
+    # 3) branch
+    if ($choice -eq $createOption) {
+        # Immediately increment amount in fika.jsonc
+        $configPath = Join-Path $sourcePath 'user\mods\fika-server\assets\configs\fika.jsonc'
+        if (Test-Path $configPath) {
+            $content = Get-Content -Raw -Path $configPath
+            if ($content -match '"amount"\s*:\s*(\d+)') {
+                $amount = [int]($matches[1]) + 1
+                $content = $content -replace '"amount"\s*:\s*\d+', "`"amount`": $amount"
+                Set-Content -Path $configPath -Value $content
+                Write-Host "Incremented headless profile amount to $amount in fika.jsonc." -ForegroundColor Green
+            } else {
+                Write-Warning "Could not find 'amount' field in fika.jsonc."
+            }
+        } else {
+            Write-Warning "fika.jsonc not found at $configPath"
+        }
+
+        # Instruct user to start server to generate new profile
+        Write-Host "Please start the SPT server now to generate a new headless profile, then press Enter when you see 'Created 1 headless client profiles'" -ForegroundColor Yellow
+        $oldProfiles = @()
+        if ($found) { $oldProfiles = $found | ForEach-Object { $_.Name } }
+        Read-Host | Out-Null
+
+        # Wait for new profile to appear
+        do {
+            $found = Get-HeadlessProfiles -folder $profileFolder
+            $newProfiles = @()
+            if ($found) { $newProfiles = $found | ForEach-Object { $_.Name } }
+            $diff = Compare-Object $oldProfiles $newProfiles | Where-Object { $_.SideIndicator -eq '=>' }
+            if ($diff) { break }
+            Write-Host "Waiting for new profile to appear in $profileFolder..."
+            Start-Sleep -Seconds 2
+        } while ($true)
+
+        $newProfileName = ($diff | Select-Object -First 1).InputObject
+        Write-Host "New profile detected: $newProfileName" -ForegroundColor Green
+
+        # Prompt for custom alias
+        $aliasChoice = Read-Host "Would you like to set a custom name for this headless profile? (Y/N)"
+        if ($aliasChoice -match '^[Yy]$') {
+            $customAlias = Read-Host "Enter custom name for headless profile"
+            $profileBase = [IO.Path]::GetFileNameWithoutExtension($newProfileName)
+            if (Test-Path $configPath) {
+                $content = Get-Content -Raw -Path $configPath
+                # Update aliases
+                if ($content -match '"aliases"\s*:\s*\{') {
+                    $content = $content -replace '("aliases"\s*:\s*\{)', "`$1`n        `"$profileBase`": `"$customAlias`""
+                } else {
+                    $content = $content -replace '("profiles"\s*:\s*\{)', "`$1`n    `"amount`": 1,`n    `"aliases`": {`n        `"$profileBase`": `"$customAlias`"`n    },"
+                }
+                Set-Content -Path $configPath -Value $content
+                Write-Host "Set alias for $profileBase to $customAlias in fika.jsonc." -ForegroundColor Green
+            } else {
+                Write-Warning "fika.jsonc not found at $configPath"
+            }
+        } else {
+            Write-Host "Skipping custom alias setup."
+        }
+
+        continue    # loop back, but $found will be freshly reloaded at top
+    } else {
+        $chosen = $found[$choice - 1]
+        Write-Host "`nYou selected: $($chosen.Name)" -ForegroundColor Cyan
+        break   # <-- This exits the loop and continues the script
+    }
 } while ($true)
 
-# Once we have a good selection:
-$chosen = $found[[int]$selection - 1]
 Write-Host
-Write-Host ("You selected:" -f $chosen.FileName)
-
-Write-Host
-
-# Prompt to name headless profile
-$aliasChoice = Read-Host "Would you like to set a custom name for this headless profile? (Y/N)"
-if ($aliasChoice -match '^[Yy]$') {
-    $customAlias = Read-Host "Enter custom name for headless profile"
-    $profileBase = [IO.Path]::GetFileNameWithoutExtension($chosen.Name)
-    $configPath = Join-Path $sourcePath 'user\mods\fika-server\assets\configs\fika.jsonc'
-    if (Test-Path $configPath) {
-        # Read raw JSONC text
-        $content = Get-Content -Raw -Path $configPath
-
-        if ($content -match '"aliases"\s*:\s*\{') {
-            # Inject the new alias into existing aliases block
-            $content = $content -replace '("aliases"\s*:\s*\{)', "`$1`n    `"$profileBase`": `"$customAlias`""
-        } else {
-            # Insert a new aliases block under "profiles"
-            $content = $content -replace '("profiles"\s*:\s*\{)', "`$1`n    `"aliases`": {`n        `"$profileBase`": `"$customAlias`"`n    },"
-        }
-
-        # Write back without upsetting comments
-        Set-Content -Path $configPath -Value $content
-        Write-Host "Set alias for $profileBase to $customAlias in fika.jsonc" -ForegroundColor Green
-    } else {
-        Write-Warning "fika.jsonc not found at $configPath"
-    }
-} else {
-    Write-Host "Skipping custom alias setup."
-}
-
 Write-Host
 
 # Ask if the server is hosted elsewhere
@@ -198,7 +218,7 @@ do {
 
         # Only prompt for IP:Port if remote
         if ($remote -match '^[Yy]$') {
-            $ipPort = Read-Host 'Enter the remote server IP:Port (e.g. 192.168.1.100:6969)'
+            $ipPort = Read-Host 'Enter the remote server computerIP:Port (e.g. 192.168.1.100:6969)'
         } else {
             # Local backend – no prompt
             $ipPort = '127.0.0.1:6969'
@@ -235,7 +255,7 @@ do {
 
 Write-Host
 
-Write-Host "I've moved the Start_headless_$profileBase to the root of this folder. Make sure that it's started from the headless computer and not the server PC!" -ForegroundColor DarkGreen
+Write-Host "I've moved the Start_headless_$profileBase to the root of this folder. Make sure that it's started from the headless computer when you move this foler and not the server PC!" -ForegroundColor Cyan
 
 Write-Host
 
@@ -244,7 +264,7 @@ Read-Host
 
 $src = $sourcePath.TrimEnd('\\')
 $dst = (Get-Location).Path.TrimEnd('\\')
-Write-Host "Starting Robocopy from '$src' to '$dst'..." -ForegroundColor Green
+Write-Host "Starting Robocopy from '$src' to '$dst'... This might take a while!" -ForegroundColor Green
 # STOP DELETING THE SCRIPT GODDAMN YOU
 $exitCode = & robocopy "$src" "$dst" /E /MT:8 /Z /R:1 /W:1
 Write-Host
@@ -263,7 +283,7 @@ $incompat = @{
     'Profile Editor'           = 'Can corrupt presets. Use at your own peril.'
     'Pity Loot'                = 'Breaks scav runs.'
     'Friendly PMCs'            = 'Not friendly when >1 player; may cause weird errors.'
-    "That's Lit"              = 'Needs the sync add-on (Check Pins) or significant FPS drop.'
+    "That's Lit"              = 'Needs the sync add-on (Check Pins on Discord) or significant FPS drop.'
     'LootRadius'              = 'Not working with latest Fika; view-only issues.'
     'LootValue'               = 'Will lag game the longer raid goes on.'
     'Various Hardcore Starts*'  = 'Prevents dedicated client from generating the .bat file.'
@@ -358,5 +378,5 @@ try {
 
 Write-Host
 
-Write-Host "All done! `nCopy the entire folder that this script is located in to the PC you want the headless server to run on and start the 'start_headless_' script!" -ForegroundColor DarkGreen
+Write-Host "All done! `nCopy the entire folder that this script is located in to the PC you want the headless server to run on and start the 'start_headless_$profileBase' script!" -ForegroundColor DarkGreen
 Read-Host "Press Enter to close."
