@@ -1,6 +1,6 @@
 # **THIS SCRIPT IS INTENDED TO BE RAN ON THE COMPUTER YOU INITIALLY SET UP FIKA WITH!**   
 
-Note: This script was put together mostly by ChatGPT o4-mini-high, with slight adjustments made by me to fix bugs and improve legibility. If that concerns you, I understand and you absolutely don't have to run this! The instructions are pretty easy to follow on the fika-gitbook.
+Note: This script was put together mostly by ChatGPT o4-mini-high, with slight adjustments made by me to fix bugs and improve legibility. If that concerns you, I understand and you absolutely don't have to run this! The instructions are pretty easy to follow on the [fika-gitbook.](https://project-fika.gitbook.io/wiki/advanced-features/headless-client)
 
 ## What does this script do exactly?
 - Explains the difference between the server, client, and headless client.
