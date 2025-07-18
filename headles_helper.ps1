@@ -58,7 +58,7 @@ if ((Test-Path $asmPath) -and (Test-Path $bakPath)) {
         Read-Host 'Press Enter to continue...' | Out-Null
     }
     if ($hashOrig -eq $hashBak) {
-        Write-Host 'Assembly-CSharp.dll has not been patched correctly! Is SPT installed correctly?.' -ForegroundColor Red
+        Write-Host 'Assembly-CSharp.dll has not been patched correctly! Make sure you have launched SPT, created a character, and made it to the Stash in your source folder!' -ForegroundColor Red
     } else {
         Write-Host 'Assembly-CSharp.dll has been patched correctly!' -ForegroundColor Green
         Write-Host "  Original: $asmPath"
@@ -92,7 +92,7 @@ Write-Host
 # Verify profiles folder exists under user\profiles
 $profileFolder = Join-Path $sourcePath 'user\profiles'
 if (-not (Test-Path $profileFolder -PathType Container)) {
-    Write-Host "Profiles folder not found at '$profileFolder'. Was SPT Installed correctly?" -foregroundcolor red
+    Write-Host "Profiles folder not found at '$profileFolder'. Make sure you have launched SPT, created a character, and made it to the Stash in your source folder!" -foregroundcolor red
     Start-Sleep -seconds 3 
     return
 }
@@ -255,7 +255,7 @@ do {
 
 Write-Host
 
-Write-Host "I've moved the Start_headless_$profileBase to the root of this folder. Make sure that it's started from the headless computer when you move this foler and not the server PC!" -ForegroundColor Cyan
+Write-Host "I've moved the Start_headless_$profileBase to the root of this folder. Make sure that it's started from the headless computer when you move this folder and not the server PC!" -ForegroundColor Cyan
 
 Write-Host
 
@@ -379,4 +379,9 @@ try {
 Write-Host
 
 Write-Host "All done! `nCopy the entire folder that this script is located in to the PC you want the headless server to run on and start the 'start_headless_$profileBase' script!" -ForegroundColor DarkGreen
+Write-Host 
+Write-Host "Note: When copying this folder, you'll have two SPT Server.exe files." -ForegroundColor
+Write-Host "You can run either, but know that you should stick to using the same one and possibly even delete the SPT.Server.exe that you're not using to avoid confusion." -ForegroundColor Yellow
+Write-Host "Failure to use the same SPT.Server.exe consistently may result in profiles not being updated or mods not being loaded!" -ForegroundColor Red
+Write-Host
 Read-Host "Press Enter to close."
