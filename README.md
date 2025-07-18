@@ -7,10 +7,10 @@ What does this script do exactly?
 - Copies contents of the selected folder to the script folder's directory.
 - Downloads the latest release of the headless client mod and installs it into the root directory.
 - Checks for mods that are incompatible with FIKA and asks you to remove them, list is taken from the FIKA discord.
+- Adjust and copy the headless start script for the server.
 
 Planned 
 - Ask how the user is going to host the server and help them configure it automatically before copying the files.
-- Adjust and copy the headless start script for the server.
   
 Make sure to place this script in your root SPT directory!
 
