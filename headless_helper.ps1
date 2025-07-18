@@ -236,9 +236,5 @@ try {
     Write-Error ("Failed headless download/extract: {0}" -f $_)
 }
 
-Write-Host "Now we need to set up your IP addresses correctly."
-Read-Host ""
-
-
 Write-Host "All done! Copy the entire folder that this script is located in to the PC you want the headless server to run on, and you should be good to go!" -ForegroundColor DarkGreen
 Read-Host "Press Enter to close."
