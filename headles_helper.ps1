@@ -255,7 +255,7 @@ do {
 
 Write-Host
 
-Write-Host "I've moved the Start_headless_$profileBase to the root of this folder. Make sure that it's started from the headless computer when you move this foler and not the server PC!" -ForegroundColor Cyan
+Write-Host "I've moved the Start_headless_$profileBase to the root of this folder. Make sure that it's started from the headless computer when you move this folder and not the server PC!" -ForegroundColor Cyan
 
 Write-Host
 
