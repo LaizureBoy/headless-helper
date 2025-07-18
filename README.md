@@ -1,5 +1,7 @@
 **THIS SCRIPT IS INTENDED TO BE RAN ON THE COMPUTER YOU WANT TO USE THE HEADLESS HOST ON. MAKE A NEW FOLDER AND PUT THIS SCRIPT IN IT**   
 
+Note: This script was put together mostly by ChatGPT o4-mini-high, with slight adjustments made by me to fix bugs and improve legibility. If that concerns you, I understand and you absolutely don't have to run this! The instructions are pretty easy to follow on the fika-gitbook.
+
 What does this script do exactly?
 - Explains the difference between the server, client, and headless client.
 - Asks you to select your FIKA installation folder
