@@ -47,26 +47,30 @@ Write-Host "Selected SPT folder: '$sourcePath'"
 
 Write-Host
 
-# Integrity check on Assembly-CSharp.dll
+# Integrity check: compare Assembly-CSharp.dll with its .spt.bak backup
 $asmPath = Join-Path $sourcePath 'EscapeFromTarkov_Data\Managed\Assembly-CSharp.dll'
-$expectedHash = '12D5FD1728C58A9CD71A454FB5EAE506B5A0A3C2BB35D543C4022800E10F47D5'
-if (Test-Path $asmPath) {
+$bakPath = Join-Path (Split-Path $asmPath) 'Assembly-CSharp.dll.spt-bak'
+if ((Test-Path $asmPath) -and (Test-Path $bakPath)) {
     try {
-        $actualHash = (Get-FileHash -Path $asmPath -Algorithm SHA256).Hash
+        $hashOrig = (Get-FileHash -Path $asmPath -Algorithm SHA256).Hash
+        $hashBak  = (Get-FileHash -Path $bakPath -Algorithm SHA256).Hash
     } catch {
-        Write-Host "Failed to compute hash for $asmPath"
-        Read-Host 'Press Enter to continue...'
+        Write-Host 'Failed to compute file hashes for comparison.' -ForegroundColor Red
+        Read-Host 'Press Enter to continue...' | Out-Null
     }
-    if ($actualHash -ne $expectedHash) {
-        Write-Host "Assembly-CSharp.dll hash mismatch. Expected: $expectedHash";
-        Write-Host "Actual:   $actualHash";
-        Write-Host 'Please start the SPT Launcher at least once to generate the correct DLL, then press Enter to continue.'
-        Read-Host | Out-Null
+    if ($hashOrig -eq $hashBak) {
+        Write-Host 'Assembly-CSharp.dll has not been patched correctly! Is SPT installed correctly?.' -ForegroundColor Red
     } else {
-        Write-Host 'Assembly-CSharp.dll integrity verified. Hash: '$actualHash'' -ForegroundColor Green
+        Write-Host 'Assembly-CSharp.dll has been patched correctly!' -ForegroundColor Green
+        Write-Host "  Original: $asmPath"
+        Write-Host "  Backup:   $bakPath"
+        Read-Host 'Press Enter to continue...' | Out-Null
     }
-} 
-
+} else {
+    if (-not (Test-Path $asmPath)) { Write-Host "Original DLL not found: $asmPath" -ForegroundColor Red }
+    if (-not (Test-Path $bakPath)) { Write-Host "Backup DLL not found:   $bakPath" -ForegroundColor Red }
+    Write-Host | Out-Null
+}
 Write-Host
 
 # Function to wait for fika.jsonc to exist
@@ -96,22 +100,22 @@ if (-not (Test-Path $profileFolder -PathType Container)) {
 
 Write-Host
 
-# Function to find JSON profiles whose password is 'fika-headless'
+# Find headless profiles
 function Get-HeadlessProfiles {
-    param($folder)
-    Get-ChildItem -Path $folder -Filter '*.json' -File -Recurse | Where-Object {
+    param(
+        [string]$folder
+    )
+
+    Get-ChildItem -Path $folder -Recurse -Filter '*.json' -File |
+    Where-Object {
         try {
             (Get-Content -Path $_.FullName -Raw) -match '"password"\s*:\s*"fika-headless"'
         } catch {
             $false
         }
-    } | ForEach-Object {
-        [PSCustomObject]@{
-            FileName = $_.Name
-            FullPath = $_.FullName
-        }
     }
 }
+
 
 # Loop until at least one headless profile is detected
 $found = @()
@@ -122,7 +126,7 @@ while ($found.Count -eq 0) {
     # No profiles yet: update fika.jsonc "amount" to 1
     $configPath = Join-Path $sourcePath 'user\mods\fika-server\assets\configs\fika.jsonc'
     if (Test-Path $configPath) {
-        (Get-Content -Path $configPath -Raw) -replace '"amount"\s*:\s*\d+', '"amount": 1' |
+        (Get-Content -Path $configPath -Raw) -replace '"amount"\s*:\s*\d+', '"amount": 2' |
             Set-Content -Path $configPath
         Write-Host "Set 'amount' to 1 in '$configPath'" -foregroundcolor green
     } else {
@@ -135,13 +139,10 @@ while ($found.Count -eq 0) {
 
 Write-Host
 
-# Display detected profiles
-Write-Host "`nDetected headless profiles:`n" -foregroundcolor green
+Write-Host "`nDetected headless profiles:`n" -ForegroundColor Green
 for ($i = 0; $i -lt $found.Count; $i++) {
-    Write-Host ("  {0}) {1}" -f ($i + 1), $found[$i].FileName) -ForegroundColor Green
+    Write-Host ("  {0}) {1}" -f ($i + 1), $found[$i].Name) -ForegroundColor Green 
 }
-
-Write-Host
 
 # Prompt the user to select a profile
 do {
@@ -157,6 +158,29 @@ $chosen = $found[[int]$selection - 1]
 Write-Host
 Write-Host ("You selected: {0}" -f $chosen.FileName)
 
+# Ask if the server is hosted elsewhere
+do {
+    $remote = Read-Host "Are you hosting the server on another computer? (Y/N)"
+    if ($remote -match '^[Yy]$') {
+        # Tell them to copy the chosen profile
+        Write-Host "`nPlease copy the selected profile file to the server PC's 'user\profiles' folder."
+        # Open the folder containing that profile
+        $profilePath = $found[[int]$selection - 1].FullName
+        Write-Host "Opening folder: $(Split-Path $profilePath)" -ForegroundColor Green
+        Invoke-Item (Split-Path $profilePath)
+        Write-Host ""  # blank line
+        break
+    }
+    elseif ($remote -match '^[Nn]$') {
+        # Local host—just continue
+        break
+    }
+    else {
+        Write-Host "Invalid input. Please enter Y or N." -ForegroundColor Yellow
+    }
+} while ($true)
+
+Write-Host
 
 Write-Host "Press Enter to begin copying your files!" -ForegroundColor Yellow
 Read-Host
