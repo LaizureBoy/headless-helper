@@ -15,8 +15,6 @@ Note: This script was put together mostly by ChatGPT o4-mini-high, with slight a
 **Planned**
 - Improve legibility and better explain some steps.
 
-  
-Make sure to place this script in your root SPT directory!
 
 ## Installation: 
 Place this script inside a new folder that you want to be the headless folder.
