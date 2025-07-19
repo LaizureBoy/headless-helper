@@ -3,22 +3,34 @@ Write-Host
 Write-Host "               Here's a quick explanation of what the server, headless, and clients are in Fika:"  #Added this because I feel that people are fundamentally misunderstanding what each of these are on the gitbook instructions. Hell, maybe I do too! Input is welcome.
 Write-Host
 Write-Host "The 'Server' for Fika is the computer that runs the SPT Server.exe program, which is required to host the backend `nfeatures of SPT like your profiles, stash, traders and quests. 
-You must have a Server for anyone to connect to and play together. The Server typically uses mods that contain a 'mods' folder, and the Server (as well as all connecting players, including the headless client) are REQUIRED to have EFT `nand SPT installed. 
+You must have a Server for anyone to connect to and play together. The Server typically uses mods that contain a `n'mods' folder, and the Server (as well as all connecting players, including the headless client) are REQUIRED to have `nEFT and SPT installed. 
 Only the Server host needs most mods installed, but large mods, like those that add weapons, will `ngenerate bundles that the players will have to download. "
 Write-Host
 Write-host "    For more information, check this post on the discord: https://discord.com/channels/1202292159366037545/1234332919443488799/1235518309882007552  " -ForegroundColor Yellow
 Write-Host
 Write-Host
-Write-Host "The 'Headless' is a 'player' that is used to host the raid. They're invisible and in the skybox, but they drastically improve performance because the person that hosts the raid is the one that does all of the in-game calculations,
-which put a heavy strain on your computer. You can think of the headless client as just another player with `nsome extra configuration, except that there are some gameplay mods that you "  -NoNewline
+Write-Host "The 'Headless' is a 'player' that is used to host the raid. `nThey're invisible and in the skybox, but they drastically improve performance because the person that hosts the raid is the one that does all of the in-game calculations,
+which put a heavy strain on your computer. `nYou can think of the headless client as just another player with some extra configuration, except that there are some gameplay mods that you "  -NoNewline
 Write-Host "!!DO NOT WANT INSTALLED ON THE HEADLESS!!" -NoNewline -ForegroundColor Red
 Write-Host
 Write-Host
 Write-Host "Check the gitbook installation instructions for more info: https://project-fika.gitbook.io/wiki/advanced-features/headless-client" -ForegroundColor Yellow
 Write-Host
 Write-Host
-Write-Host "Finally, the 'Client' is everyone who connects to the 'Server' computer. They run using the SPT Launcher.exe program. They require the same mods as each other (For simplicity sake) in order for Fika to operate as usual. This includes yourself, your friends, and the headless client (with some exceptions)."
+Write-Host "Finally, the 'Client' is everyone who connects to the 'Server' computer. `nThey run using the SPT Launcher.exe program. They require the same mods as each other (For simplicity sake) in order `nfor Fika to operate as usual. `nThis includes yourself, your friends, and the headless client (with some exceptions)."
 Write-Host
+do {
+    $answer = Read-Host "Do you want to learn more about local and remote networking for Fika? (Y/N)"
+} while ($answer -notmatch '^[YyNn]$')
+if ($answer -match '^[Yy]$') {
+    Write-Host "`nLocal backend means that the server and headless client are on the same computer, or at least the same local network. `nIf you hit the windows key and type 'cmd' and hit enter, then type 'ipconfig' and hit enter, you can see your local IP `naddress. It will usually look like: IPv4 Address. . . . . . . . . . . : 192.168.1.163 `nIf your friends (or headless) are on the same network (e.g. home wifi / same house) they can connect to that IP." -ForegroundColor Yellow
+    write-Host
+    write-Host "Remote backend means that the server is hosted on a different computer, possibly over the internet. `nIf you want to check the server's public IP, you can visit https://whatismyipaddress.com/ from the server computer. `nIf your friends are connecting over the internet, they will need to use this IP. `nYou will have to port forward the ports listed in the documentation of the fika-gitbook. `nEvery router is different, so sadly this isn't something we can really help with." -ForegroundColor Yellow
+} else {
+    Write-Host "Skipping..." -ForegroundColor Yellow
+}
+Write-Host
+
 Read-Host "Press ENTER to continue, and choose your SPT Fika installation folder you want to copy the files from"
 
 # Load WinForms for folder picker dialog
@@ -67,9 +79,10 @@ if ((Test-Path $asmPath) -and (Test-Path $bakPath)) {
     }
 } else {
     if (-not (Test-Path $asmPath)) { Write-Host "Original DLL not found: $asmPath" -ForegroundColor Red }
-    if (-not (Test-Path $bakPath)) { Write-Host "Backup DLL not found:   $bakPath" -ForegroundColor Red }
+    if (-not (Test-Path $bakPath)) { Write-Host "Backup DLL not found: Make sure you've launched SPT and created a character to generate! $bakPath" -ForegroundColor Red }
     Write-Host | Out-Null
 }
+
 Write-Host
 
 # Function to wait for fika.jsonc to exist
@@ -155,11 +168,11 @@ do {
                 Write-Warning "Could not find 'amount' field in fika.jsonc."
             }
         } else {
-            Write-Warning "fika.jsonc not found at $configPath"
+            Write-Warning "fika.jsonc not found at $configPath. Have you installed fika and ran the server and launcher yet?"
         }
 
         # Instruct user to start server to generate new profile
-        Write-Host "Please start the SPT server now to generate a new headless profile, then press Enter when you see 'Created 1 headless client profiles'" -ForegroundColor Yellow
+        Write-Host "Please start the SPT server now to generate a new headless profile, then press Enter when you see 'Created 1 headless client profiles'" -ForegroundColor DarkYellow
         $oldProfiles = @()
         if ($found) { $oldProfiles = $found | ForEach-Object { $_.Name } }
         Read-Host | Out-Null
@@ -171,7 +184,7 @@ do {
             if ($found) { $newProfiles = $found | ForEach-Object { $_.Name } }
             $diff = Compare-Object $oldProfiles $newProfiles | Where-Object { $_.SideIndicator -eq '=>' }
             if ($diff) { break }
-            Write-Host "Waiting for new profile to appear in $profileFolder..."
+            Write-Host "Waiting for new profile to appear in $profileFolder..." -ForegroundColor Yellow
             Start-Sleep -Seconds 2
         } while ($true)
 
@@ -197,7 +210,7 @@ do {
                 Write-Warning "fika.jsonc not found at $configPath"
             }
         } else {
-            Write-Host "Skipping custom alias setup."
+            Write-Host "Skipping custom alias setup..." -ForegroundColor DarkYellow
         }
 
         continue    # loop back, but $found will be freshly reloaded at top
@@ -218,7 +231,7 @@ do {
 
         # Only prompt for IP:Port if remote
         if ($remote -match '^[Yy]$') {
-            $ipPort = Read-Host 'Enter the remote server computerIP:Port (e.g. 192.168.1.100:6969)'
+            $ipPort = Read-Host 'Enter the remote server computer IP:Port (e.g. 192.168.1.100:6969) ~ If you are hosting this on a different PC but the same network, enter the local IP of that PC'
         } else {
             # Local backend – no prompt
             $ipPort = '127.0.0.1:6969'
