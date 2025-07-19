@@ -380,7 +380,7 @@ Write-Host
 
 Write-Host "All done! `nCopy the entire folder that this script is located in to the PC you want the headless server to run on and start the 'start_headless_$profileBase' script!" -ForegroundColor DarkGreen
 Write-Host 
-Write-Host "Note: When copying this folder, you'll have two SPT Server.exe files." -ForegroundColor
+Write-Host "Note: When copying this folder, you'll have two SPT Server.exe files." -ForegroundColor Yellow
 Write-Host "You can run either, but know that you should stick to using the same one and possibly even delete the SPT.Server.exe that you're not using to avoid confusion." -ForegroundColor Yellow
 Write-Host "Failure to use the same SPT.Server.exe consistently may result in profiles not being updated or mods not being loaded!" -ForegroundColor Red
 Write-Host
